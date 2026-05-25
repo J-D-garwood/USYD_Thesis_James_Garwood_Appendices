@@ -15,7 +15,7 @@
  *
  * Hardware context:
  *   AD7685  — 16-bit external ADC, 0V–VREF, straight binary, SPI interface
- *   LPC4370 — ARM Cortex-M4, 264 KB SRAM, SD card via SPI for event storage
+ *   LPC4370 — ARM Cortex-M4, 282 kB SRAM, SD card via SPI for event storage
  *   Sample rate: 100 kSPS (well within AD7685's 250 kSPS max)
  *
  * Algorithm:
@@ -25,13 +25,13 @@
  *   4. COOLDOWN     — dead time (300 ms) to avoid re-triggering on ringdown
  *
  * Detection parameters (derived from PLB experimental data):
- *   BUFFER_SAMPLES  = 30,000  (300 ms @ 100 kSPS, 60 KB — fits in 264 KB SRAM)
+ *   BUFFER_SAMPLES  = 30,000  (300 ms @ 100 kSPS, 60 KB — fits in 282 kB SRAM)
  *   POWER_WINDOW    = 1,000   (10 ms sliding window for running power)
  *   NOISE_ALPHA     = 0.001   (slow exponential average for noise floor)
  *   TRIGGER_K       = 8.0     (trigger at 8x noise floor power)
  *                             (worst-case PLB ratio was 25x, K=8 gives margin)
  *   COOLDOWN_SAMPLES= 30,000  (300 ms refractory period)
- *   CALIBRATION_SAMPLES=200,000 (2 seconds of quiet calibration at startup)
+ *   CALIBRATION_SAMPLES= 20,000 (200 ms — PC-side value; hardware uses 200,000)
  *
  * Compile:  gcc piezo_impact_detector.c -o detector -lm
  * Run:      ./detector <adc_output.csv>
@@ -50,7 +50,7 @@
 #define MIDSCALE_CODE        32768       /* 0x8000 — DC bias point          */
 
 /* Circular capture buffer: 300 ms @ 100 kSPS = 30,000 samples = 60 KB     */
-/* On LPC4370 this sits in SRAM, allocated with __DATA(RAM1)                */
+/* On LPC4370 this sits in SRAM (282 kB total), allocated with __DATA(RAM1) */
 #define BUFFER_SAMPLES       30000
 
 /* Sliding power window: 10 ms = 1,000 samples                              */
@@ -68,8 +68,14 @@
 /* Cooldown: 300 ms dead time after trigger to suppress ringdown            */
 #define COOLDOWN_SAMPLES     30000
 
-/* Startup calibration: 2 seconds of quiet sampling before enabling trigger */
-#define CALIBRATION_SAMPLES  200000
+/* Startup calibration period.
+ * Hardware (LPC4370): 200,000 samples = 2 s — allows EMA to converge on
+ *   the true quiescent noise floor before monitoring begins.
+ * PC-side (this file): reduced to 20,000 samples = 200 ms, because the
+ *   ADC output CSV files are 120,000 samples long; using the hardware value
+ *   would exhaust the file before calibration completes, preventing detection.
+ * All other parameters are identical between the two versions. */
+#define CALIBRATION_SAMPLES  20000
 
 /* Max events to save per run (SD card limit proxy)                         */
 #define MAX_EVENTS           64
